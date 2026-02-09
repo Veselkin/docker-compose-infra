@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  icecast:
+    build: .
+    container_name: icecast
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Samara
+      - ICECAST_SOURCE_PASSWORD=${ICECAST_SOURCE_PASSWORD}
+      - ICECAST_ADMIN_PASSWORD=${ICECAST_ADMIN_PASSWORD}
+      - ICECAST_RELAY_PASSWORD=${ICECAST_RELAY_PASSWORD}
+      - ICECAST_ADMIN_EMAIL=${ICECAST_ADMIN_EMAIL}
+      - ICECAST_LOCATION=${ICECAST_LOCATION}
+      - ICECAST_HOSTNAME=${ICECAST_HOSTNAME}
+    volumes:
+      - /home/sysops/icecast/logs:/var/log/icecast
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.icecast.rule=Host(`${ICECAST_HOSTNAME}`) && Path(`/stream.mp3`)"
+      - "traefik.http.routers.icecast.entrypoints=websecure"
+      - "traefik.http.routers.icecast.tls=true"
+      - "traefik.http.routers.icecast.tls.certresolver=le"
+      - "traefik.http.services.icecast.loadbalancer.server.port=8000"
+    networks:
+      - traefik_proxy
+
+networks:
+  traefik_proxy:
+    external: true
