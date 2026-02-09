@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: php_fpm
+    restart: unless-stopped
+    volumes:
+      # Прокидываем все сайты, чтобы PHP имел к ним доступ
+      - /home/sysops/sites/apache/karaoka.ru:/var/www/karaoka
+      - /home/sysops/sites/apache/bessonnicza.ru:/var/www/bessonnicza
+      - /home/sysops/sites/nginx:/var/www/nginx
+      # Сессии и конфиги
+      - sessions:/tmp/sessions
+      - ./conf/custom.ini:/usr/local/etc/php/conf.d/99-custom.ini:ro
+      - ./conf/www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
+    networks:
+      - traefik_proxy
+
+volumes:
+  sessions:
+    name: php_sessions
+
+networks:
+  traefik_proxy:
+    external: true
