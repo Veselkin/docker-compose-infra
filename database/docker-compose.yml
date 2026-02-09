@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  mariadb:
+    image: mariadb:11
+    container_name: mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Europe/Samara
+    volumes:
+      - /home/sysops/mariadb/data:/var/lib/mysql
+    networks:
+      - traefik_proxy
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: pma
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mariadb
+      PMA_PORT: 3306
+      PMA_ABSOLUTE_URI: https://${DOMAIN}/pma/
+      TZ: Europe/Samara
+      UPLOAD_LIMIT: 100M
+    labels:
+      - "traefik.enable=true"
+      # Роутер для PMA
+      - "traefik.http.routers.pma.rule=Host(`${DOMAIN}`) && PathPrefix(`/pma`)"
+      - "traefik.http.routers.pma.entrypoints=websecure"
+      - "traefik.http.routers.pma.tls.certresolver=le"
+      # Мидлвар для отрезания префикса /pma, чтобы phpMyAdmin думал, что он в корне
+      - "traefik.http.middlewares.pma-stripprefix.stripprefix.prefixes=/pma"
+      - "traefik.http.routers.pma.middlewares=pma-stripprefix,auth-admin@file"
+    networks:
+      - traefik_proxy
+
+networks:
+  traefik_proxy:
+    external: true
