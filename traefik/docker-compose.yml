@@ -1,0 +1,42 @@
+services:
+  traefik:
+    image: traefik:v3.1  # Используем актуальную ветку v3
+    container_name: traefik
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    command:
+      - "--log.level=ERROR"
+      - "--accesslog.format=json"
+      - "--api.dashboard=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Редирект с HTTP на HTTPS на уровне Entrypoint
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # Провайдеры
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/etc/traefik/conf"
+      - "--providers.file.watch=true"
+      # SSL через Let's Encrypt
+      - "--certificatesresolvers.le.acme.email=${SSL_EMAIL}"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.le.acme.tlschallenge=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./conf:/etc/traefik/conf"
+      - "./letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./logs:/var/log/traefik"
+    networks:
+      - traefik_proxy
+
+networks:
+  traefik_proxy:
+    external: true
