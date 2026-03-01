@@ -1,11 +1,17 @@
-version: '3.9'
-
 services:
   zabbix-db:
     image: mysql:8.0
     container_name: zabbix-db
     restart: unless-stopped
-    command: --character-set-server=utf8 --collation-server=utf8_bin --default-authentication-plugin=mysql_native_password
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_bin
+      --innodb-buffer-pool-size=256M
+      --innodb-redo-log-capacity=134217728
+      --innodb-flush-log-at-trx-commit=2
+      --max-connections=50
+      --tmp-table-size=32M
+      --max-heap-table-size=32M
     networks:
       - zabbix-net
     volumes:
@@ -15,6 +21,12 @@ services:
       - MYSQL_USER=zabbix
       - MYSQL_PASSWORD=${ZABBIX_DB_PASSWORD}
       - MYSQL_ROOT_PASSWORD=${ZABBIX_DB_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "zabbix", "-p${ZABBIX_DB_PASSWORD}"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
 
   zabbix-server:
     image: zabbix/zabbix-server-mysql:latest
@@ -33,8 +45,23 @@ services:
       - MYSQL_USER=zabbix
       - MYSQL_PASSWORD=${ZABBIX_DB_PASSWORD}
       - MYSQL_ROOT_PASSWORD=${ZABBIX_DB_ROOT_PASSWORD}
+      # Ограничение кешей
+      - ZBX_CACHESIZE=128M
+      - ZBX_HISTORYCACHESIZE=32M
+      - ZBX_HISTORYINDEXCACHESIZE=16M
+      - ZBX_VALUECACHESIZE=32M
+      # История и тренды — сколько дней хранить
+      - ZBX_HOUSEKEEPINGFREQUENCY=1
+      - ZBX_MAXHOUSEKEEPERDELETE=5000
+      # Syncers
+      - ZBX_STARTHISTORYSYNCERS=3
+      # Pollers — уменьши если мало хостов
+      - ZBX_STARTPOLLERS=3
+      - ZBX_STARTPINGERS=1
+      - ZBX_STARTTRAPPERS=3
     depends_on:
-      - zabbix-db
+      zabbix-db:
+        condition: service_healthy
 
   zabbix-web:
     image: zabbix/zabbix-web-nginx-mysql:latest
@@ -51,8 +78,9 @@ services:
       - MYSQL_USER=zabbix
       - MYSQL_PASSWORD=${ZABBIX_DB_PASSWORD}
       - ZBX_SERVER_HOST=zabbix-server
-      # Важно для Traefik: сообщаем PHP приложению о префиксе
       - ZBX_NGINX_SUBPATH=/zabbix
+      # Ограничение PHP
+      - PHP_TZ=Europe/Samara
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_proxy"
@@ -60,12 +88,12 @@ services:
       - "traefik.http.routers.zabbix.entrypoints=websecure"
       - "traefik.http.routers.zabbix.tls=true"
       - "traefik.http.routers.zabbix.tls.certresolver=le"
-      # Мидлвар для очистки префикса, чтобы Zabbix-web видел запросы как внутренние
       - "traefik.http.middlewares.zabbix-strip.stripprefix.prefixes=/zabbix"
-      - "traefik.http.routers.zabbix.middlewares=zabbix-strip,auth-admin@file"
+      - "traefik.http.routers.zabbix.middlewares=zabbix-strip"
       - "traefik.http.services.zabbix.loadbalancer.server.port=8080"
     depends_on:
-      - zabbix-server
+      zabbix-db:
+        condition: service_healthy
 
 networks:
   zabbix-net:
